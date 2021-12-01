@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using VolleyApi.Model;
@@ -62,31 +63,38 @@ namespace VolleyApi.Controllers
             return await GetCookieReferee();
         }
 
-        [HttpPost("GetHtmlReferee")]
+        [HttpGet("GetHtmlReferee")]
         public async Task<string> GetHtmlReferee()
         {
-            using var client = new HttpClient();
-            try
-            {
-                var cookie = CookieReferee();
-                int position = cookie.IndexOf(";");
-                string postParams = cookie.Substring(0, position);
-                var result = await client.PostAsync(urlDesignation, new StringContent(postParams));
+            var cookieContainer = new CookieContainer();
+            using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
+            using (var client = new HttpClient(handler) { BaseAddress = new Uri(urlDesignation) })
+                try
+                {
+
+                    var cookie = CookieReferee();
+                    int endPosition = cookie.IndexOf(";");
+                    int startPosition = cookie.IndexOf("=");
+                    var PHPSESSID = cookie.Substring(0, endPosition);
+                    PHPSESSID = PHPSESSID.Substring(startPosition + 1);
+                    cookieContainer.Add(new Uri(urlDesignation), new Cookie("PHPSESSID", PHPSESSID));
+
+                    var result = await client.GetAsync(urlDesignation);
 
 
-                var responseString = await result.Content.ReadAsStringAsync();
+                    var responseString = await result.Content.ReadAsStringAsync();
 
-                HtmlDocument htmlDoc = new HtmlDocument();
-                htmlDoc.LoadHtml(responseString);
+                    HtmlDocument htmlDoc = new HtmlDocument();
+                    htmlDoc.LoadHtml(responseString);
 
-                HtmlNode htmlBody = htmlDoc.DocumentNode.SelectSingleNode("/html/body/table[2]");
-                return htmlBody.InnerHtml;
+                    HtmlNode htmlBody = htmlDoc.DocumentNode.SelectSingleNode("/html/body/table[2]");
+                    return htmlBody.InnerHtml;
 
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e.Message);
-            }
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(e.Message);
+                }
 
             return null;
         }
